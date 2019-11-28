@@ -1,10 +1,15 @@
 let Packets = {
     ConnectionPackets: {
-        StartUpPacket: 0,
         CacheData: 1,
-        OutOfDate: 6,
         Login: 14,
-        JagGrab: 15
+        JagGrab: 15,
+        WorldLogin: 16
+    },
+
+    OutgoingPackets: {
+        StartUpPacket: 0,
+        WrongPassword: 3,
+        OutOfDate: 6
     },
 
     Read: {
