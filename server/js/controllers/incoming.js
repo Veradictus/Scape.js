@@ -1,5 +1,7 @@
 let Packets = require('../network/packets'),
-    Constants = require('../util/constants');
+    Constants = require('../util/constants')
+    Utils = require('../util/utils')
+    bigInt = require('big-integer');
 
 class Incoming {
 
@@ -18,12 +20,13 @@ class Incoming {
         self.network.onClose((socket) => {
             self.world.removeSocket(socket);
         });
+
     }
 
     handleStream(stream) {
         let self = this,
-            opcode = stream.read(Packets.Read.Int),
-            response;
+            opcode = stream.read(),
+            response, revision;
 
         log.debug(`${opcode} - buffer: ${stream.buffer}`);
 
@@ -49,21 +52,18 @@ class Incoming {
                 break;
 
             case Packets.ConnectionPackets.Login:
-                let loginResponseArray = self.getRandom(); //Just the opcode.
 
-                loginResponseArray.unshift(0);
+                stream.socket.sessionId = stream.read();
 
-                response = Buffer.from(Int32Array.from(loginResponseArray)); //Empty login packet response.
-
-                stream.socket.write(response);
+                stream.socket.write(self.world.createBuffer([0, 0, 0, 0, 0, 0, 0, 0, 0]));
 
                 break;
 
             case Packets.ConnectionPackets.JagGrab: // This is the initial cache request.
-                let revision = stream.parse(stream.readRemaining());
+                revision = stream.parse(stream.readRemaining());
 
                 if (revision !== Constants.Revision) {
-                    response = Buffer.from(Uint32Array.from([Packets.OutgoingPackets.OutOfDate]));
+                    response = self.world.createBuffer([Packets.OutgoingPackets.OutOfDate], true);
 
                     stream.socket.write(response);
                     stream.socket.destroy();
@@ -73,33 +73,94 @@ class Incoming {
 
                 log.info(`Correct revision received for ${stream.socket.remoteAddress}.`);
 
-                stream.socket.write(Buffer.from(Uint32Array.from([Packets.OutgoingPackets.StartUpPacket])));
+                stream.socket.write(self.world.createBuffer([Packets.OutgoingPackets.StartUpPacket], true));
 
                 break;
 
             case Packets.ConnectionPackets.WorldLogin: //Similar to Welcome packet in Kaetram.
+                if (!self.world.allowConnections) {
+                    stream.socket.write(self.world.createBuffer([Packets.OutgoingPackets.ServerUpdate]));
+                    return;
+                }
 
-                stream.socket.write(Buffer.from(Uint32Array.from([Packets.OutgoingPackets.WrongPassword])));
+                let packetSize = stream.readShort();
+
+                if (packetSize != stream.getBufferLength()) {
+                    stream.socket.destroy();
+
+                    return;
+                }
+
+                revision = stream.readInt();
+
+                if (revision !== Constants.Revision) {
+
+                    response = self.world.createBuffer([Packets.OutgoingPackets.OutOfDate], true);
+
+                    stream.socket.write(response);
+                    stream.socket.destroy();
+
+                    return;
+                }
+
+                /* The following data is not used for anything yet. */
+
+                stream.read(true); // Skipping a byte.
+
+                let displayMode = stream.read(),
+                    screenWidth = stream.readShort(),
+                    screenHeight = stream.readShort();
+
+                for (let i = 0; i < 24; i++)
+                    stream.read(true);
+
+                log.info(stream.readString()); // Settings
+
+                stream.readInt();
+                stream.readInt();
+
+                stream.readShort();
+
+                for (let i = 0; i < 29; i++)
+                    stream.readInt();
+
+                if (stream.read() != 10) //Perhaps to skip something?
+                    stream.read();
+
+
+                for (let i = 0; i < 4; i++)
+                    stream.readInt(); //RSA
+
+                /* ------------------------------------------- */
+
+                //4189090193853298718
+                let usernameLong = stream.readLong(),
+                    sessionId = usernameLong.shiftRight(16).and(31);
+
+                log.notice(`Username long: ${usernameLong} - ${sessionId}`);
+                log.notice(`SessionId: ${stream.socket.sessionId}`);
+
+                if (sessionId.toJSNumber() !== stream.socket.sessionId) {
+
+                    stream.socket.write(self.world.createBuffer([Packets.OutgoingPackets.BadSession]));
+                    stream.socket.destroy();
+
+                    return;
+                }
+
+                let usernameString = Utils.longToString(usernameLong);
+                let passwordString = stream.readString();
+
+                log.info(`Username String: ${usernameString}`);
+                log.info(`Password String: ${passwordString}`);
+
+                stream.socket.write(self.world.createBuffer([21], true));
+                stream.socket.destroy();
+                //stream.socket.write(self.world.createBuffer([Packets.OutgoingPackets.WrongPassword], true));
 
                 break;
 
         }
-    }
-
-    getRandom() { // Used for sending bogus data to the client upon login
-        let longVal = (Math.random() * 0x99999999D) << 32,
-            arr = [];
-
-        arr[0] = longVal >> 56;
-        arr[1] = longVal >> 48;
-        arr[2] = longVal >> 40;
-        arr[3] = longVal >> 32;
-        arr[4] = longVal >> 24;
-        arr[5] = longVal >> 16;
-        arr[6] = longVal >> 8;
-        arr[7] = longVal >> 0;
-
-        return arr;
     }
 
 }

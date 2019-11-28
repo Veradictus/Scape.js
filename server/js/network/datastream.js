@@ -1,3 +1,5 @@
+let bigInt = require('big-integer');
+
 class DataStream {
 
     constructor(buffer, socket) {
@@ -9,8 +11,36 @@ class DataStream {
         self.index = 0;
     }
 
-    read(format) {
-        return this.buffer[this.index++] & format;
+    read(signed) { //reads an unsigned byte.
+        return signed ? this.buffer[this.index++] : this.buffer[this.index++] & 0xFF;
+    }
+
+    readInt() {
+        return (this.read() << 24) + (this.read() << 16) + (this.read() << 8) + (this.read());
+    }
+
+    readLong() {
+        let long = bigInt(this.readInt()).and(0xffffffff).shiftLeft(32),
+            long1 = bigInt(this.readInt()).and(0xffffffff);
+
+        return long.plus(long1);
+    }
+
+    readShort(littleEndian) {
+        return littleEndian ? (this.read() + (this.read() << 8)) : ((this.read() << 8) + this.read());
+    }
+
+    readString() {
+        let i, str = [], j = 0;
+
+        while (i !== 0) {
+            i = this.read(true);
+            str[j] = String.fromCharCode(i);
+
+            j++;
+        }
+
+        return str.join('');
     }
 
     readRemaining() {

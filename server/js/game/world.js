@@ -9,6 +9,8 @@ class World {
 
         self.sockets = [];
 
+        self.allowConnections = true;
+
         self.incoming = new Incoming(self, network);
     }
 
@@ -34,6 +36,11 @@ class World {
 
         log.debug(`Socket ${socket.remoteAddress} has been disconnected.`);
     }
+
+    createBuffer(data, unsigned) {
+        return Buffer.from(unsigned ? Uint32Array.from(data) : Int32Array.from(data));
+    }
+    
 
 }
 
