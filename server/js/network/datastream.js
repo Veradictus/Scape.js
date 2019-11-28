@@ -1,9 +1,10 @@
 class DataStream {
 
-    constructor(buffer) {
+    constructor(buffer, socket) {
         let self = this;
 
         self.buffer = buffer;
+        self.socket = socket;
 
         self.index = 0;
     }

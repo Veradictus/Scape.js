@@ -1,4 +1,5 @@
-let Packets = require('../network/packets');
+let Packets = require('../network/packets'),
+    Constants = require('../util/constants');
 
 class Incoming {
 
@@ -8,9 +9,14 @@ class Incoming {
         self.world = world;
         self.network = network;
 
-        self.network.onStream((stream) => {
+        self.network.onStream((stream, socket) => {
+            self.world.handleSocket(socket);
 
             self.handleStream(stream);
+        });
+
+        self.network.onClose((socket) => {
+            self.world.removeSocket(socket);
         });
     }
 
@@ -18,18 +24,35 @@ class Incoming {
         let self = this,
             opcode = stream.read(Packets.Read.Int);
 
+        log.debug(`${opcode} - buffer: ${stream.buffer}`);
+
         switch(opcode) {
             case Packets.ConnectionPackets.Login:
 
                 break;
 
+            case Packets.ConnectionPackets.CacheData:
+                let packetData = Int32Array.from(Constants.CacheData.split(' '));
+
+                log.info(Buffer.from(packetData));
+                stream.socket.write(Buffer.from(packetData));
+
+                break;
+
             case Packets.ConnectionPackets.JagGrab:
-                let revision = stream.parse(stream.readRemaining());
+                let revision = stream.parse(stream.readRemaining()),
+                    response = Buffer.from(Uint32Array.from([Packets.ConnectionPackets.OutOfDate]));
 
-                log.info(revision);
+                if (revision !== Constants.Revision) {
+                    stream.socket.write(response);
+                    stream.socket.destroy();
 
-                //log.info(stream.readRemaining());
-                //log.info('Done');
+                    return;
+                }
+
+                log.info(`Correct revision received for ${stream.socket.remoteAddress}.`);
+
+                stream.socket.write(Buffer.from(Uint32Array.from([Packets.ConnectionPackets.StartUpPacket])));
 
                 break;
 

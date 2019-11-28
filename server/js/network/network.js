@@ -11,12 +11,20 @@ class Network {
         //app.use(null, null);
 
         net.createServer((socket) => {
+
             socket.on('data', (data) => {
                 let receivedBuffer = Buffer.from(data, 'hex'),
-                    stream = new DataStream(Uint32Array.from(receivedBuffer));
-                    
+                    stream = new DataStream(Uint32Array.from(receivedBuffer), socket);
+
                 if (self.streamCallback)
-                    self.streamCallback(stream);
+                    self.streamCallback(stream, socket);
+            });
+
+            socket.on('close', () => {
+
+                if (self.closeCallback)
+                    self.closeCallback(socket);
+                    
             });
 
         }).listen(port, host);
@@ -30,6 +38,10 @@ class Network {
 
     onStream(callback) {
         this.streamCallback = callback;
+    }
+
+    onClose(callback) {
+        this.closeCallback = callback;
     }
 }
 
