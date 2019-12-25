@@ -22,8 +22,17 @@ Utils.longToString = function(long) {
 
         str[11 - i++] = Utils.validCharacters[long1.minus(long.times(37))];
     }
-    
+
     return str.join('');
+};
+
+Utils.stringToBytes = function(string) {
+    let bytes = [];
+
+    for (let i = 0; i < string.length; ++i)
+        bytes = bytes.concat([string.charCodeAt(i) & 0xff]);
+
+    return bytes;
 };
 
 module.exports = Utils;

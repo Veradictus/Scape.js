@@ -1,14 +1,21 @@
-let bigInt = require('big-integer');
+let bigInt = require('big-integer'),
+    Utils = require('../util/utils');
 
 class DataStream {
 
-    constructor(buffer, socket) {
+    constructor(socket, buffer) {
         let self = this;
 
-        self.buffer = buffer;
         self.socket = socket;
+        self.buffer = buffer;
 
         self.index = 0;
+
+        if (!self.buffer) {
+            self.buffer = Buffer.from([]); // Initialize an empty buffer.
+
+            self.writeable = true;
+        }
     }
 
     read(signed) { //reads an unsigned byte.
@@ -53,6 +60,63 @@ class DataStream {
         return Uint32Array.from(arr);
     }
 
+    concatBuffer(newData, signed) {
+        let self = this;
+
+        if (!self.writeable)
+            return;
+
+        let newDataBuffer = Buffer.from(signed ? Int32Array.from(newData) : Uint32Array.from(newData));
+
+        self.buffer = Buffer.concat([self.buffer, newDataBuffer], (self.buffer.length + newData.length));
+    }
+
+    write(byte, position, negative) {
+        let self = this;
+
+        if (position)
+            self.buffer[position] = byte;
+        else
+            self.concatBuffer([negative ? -byte : byte]);
+    }
+
+    write128(byte, inv) {
+        this.concatBuffer([inv ? 128 - byte : byte + 128]);
+    }
+
+    writeByte3(byte) {
+        this.concatBuffer([byte >> 16, byte >> 8, byte]);
+    }
+
+    writeShort(val, le) {
+        this.concatBuffer(le ? [val, val >> 8] : [val >> 8, val]);
+    }
+
+    writeInt(val) {
+        this.concatBuffer([val >> 24, val >> 16, val >> 8, val]);
+    }
+
+    writeLong(bigInteger) {
+        this.concatBuffer([
+            parseInt(bigInteger.shiftRight(56)),
+            parseInt(bigInteger.shiftRight(48)),
+            parseInt(bigInteger.shiftRight(40)),
+            parseInt(bigInteger.shiftRight(32)),
+            parseInt(bigInteger.shiftRight(24)),
+            parseInt(bigInteger.shiftRight(16)),
+            parseInt(bigInteger.shiftRight(8)),
+            parseInt(bigInteger)
+        ]);
+    }
+
+    writeString(string) {
+        this.concatBuffer(Utils.stringToBytes(string));
+    }
+
+    writeData(data, signed) {
+        this.concatBuffer(data, signed);
+    }
+
     parse(data) {
         let self = this,
             info = data || self.buffer,
@@ -71,6 +135,16 @@ class DataStream {
 
     getBufferLength() {
         return this.buffer.length - this.index;
+    }
+
+    // Pushes data to the socket.
+    send() {
+        try {
+            this.socket.write(this.buffer);
+        } catch(e) {
+            log.info('Could not write to stream socket.');
+            log.info(e);
+        }
     }
 
 }

@@ -14,7 +14,7 @@ class Network {
 
             socket.on('data', (data) => {
                 let receivedBuffer = Buffer.from(data, 'hex'),
-                    stream = new DataStream(Uint32Array.from(receivedBuffer), socket);
+                    stream = new DataStream(socket, Uint32Array.from(receivedBuffer));
 
                 if (self.streamCallback)
                     self.streamCallback(stream, socket);
@@ -24,7 +24,7 @@ class Network {
 
                 if (self.closeCallback)
                     self.closeCallback(socket);
-                    
+
             });
 
         }).listen(port, host);

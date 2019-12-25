@@ -1,6 +1,7 @@
 let Packets = require('../network/packets'),
-    Constants = require('../util/constants')
-    Utils = require('../util/utils')
+    Constants = require('../util/constants'),
+    Utils = require('../util/utils'),
+    DataStream = require('../network/datastream'),
     bigInt = require('big-integer');
 
 class Incoming {
@@ -26,9 +27,10 @@ class Incoming {
     handleStream(stream) {
         let self = this,
             opcode = stream.read(),
-            response, revision;
+            response, revision,
+            dataStream = new DataStream(stream.socket);
 
-        log.debug(`${opcode} - buffer: ${stream.buffer}`);
+        log.info(`${opcode} - buffer: ${stream.buffer}`);
 
         switch(opcode) {
             case Packets.ConnectionPackets.CacheData: //Sends Update Keys to the client.
@@ -47,7 +49,8 @@ class Incoming {
                  * CacheData in constants is just CRC and Revision of 'completed' cache files (hard-coded).
                  */
 
-                stream.socket.write(Buffer.from(packetData));
+                dataStream.writeData(packetData);
+                dataStream.send();
 
                 break;
 
@@ -55,7 +58,9 @@ class Incoming {
 
                 stream.socket.sessionId = stream.read();
 
-                stream.socket.write(self.world.createBuffer([0, 0, 0, 0, 0, 0, 0, 0, 0]));
+                dataStream.writeData([0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+                dataStream.send();
 
                 break;
 
@@ -63,9 +68,9 @@ class Incoming {
                 revision = stream.parse(stream.readRemaining());
 
                 if (revision !== Constants.Revision) {
-                    response = self.world.createBuffer([Packets.OutgoingPackets.OutOfDate], true);
+                    dataStream.write(Packets.OutgoingPackets.OutOfDate);
+                    dataStream.send();
 
-                    stream.socket.write(response);
                     stream.socket.destroy();
 
                     return;
@@ -73,13 +78,15 @@ class Incoming {
 
                 log.info(`Correct revision received for ${stream.socket.remoteAddress}.`);
 
-                stream.socket.write(self.world.createBuffer([Packets.OutgoingPackets.StartUpPacket], true));
+                dataStream.write(Packets.OutgoingPackets.StartUpPacket);
+                dataStream.send();
 
                 break;
 
             case Packets.ConnectionPackets.WorldLogin: //Similar to Welcome packet in Kaetram.
                 if (!self.world.allowConnections) {
-                    stream.socket.write(self.world.createBuffer([Packets.OutgoingPackets.ServerUpdate]));
+                    dataStream.write(Packets.OutgoingPackets.ServerUpdate);
+                    dataStream.send();
                     return;
                 }
 
@@ -95,9 +102,9 @@ class Incoming {
 
                 if (revision !== Constants.Revision) {
 
-                    response = self.world.createBuffer([Packets.OutgoingPackets.OutOfDate], true);
+                    dataStream.write(Packets.OutgoingPackets.OutOfDate);
+                    dataStream.send();
 
-                    stream.socket.write(response);
                     stream.socket.destroy();
 
                     return;
@@ -137,12 +144,14 @@ class Incoming {
                 let usernameLong = stream.readLong(),
                     sessionId = usernameLong.shiftRight(16).and(31);
 
-                log.notice(`Username long: ${usernameLong} - ${sessionId}`);
-                log.notice(`SessionId: ${stream.socket.sessionId}`);
+                log.debug(`Username long: ${usernameLong} - ${sessionId}`);
+                log.debug(`SessionId: ${stream.socket.sessionId}`);
 
                 if (sessionId.toJSNumber() !== stream.socket.sessionId) {
 
-                    stream.socket.write(self.world.createBuffer([Packets.OutgoingPackets.BadSession]));
+                    dataStream.write(Packets.OutgoingPackets.BadSession);
+                    dataStream.send();
+
                     stream.socket.destroy();
 
                     return;
@@ -154,13 +163,21 @@ class Incoming {
                 log.info(`Username String: ${usernameString}`);
                 log.info(`Password String: ${passwordString}`);
 
-                stream.socket.write(self.world.createBuffer([21], true));
-                stream.socket.destroy();
                 //stream.socket.write(self.world.createBuffer([Packets.OutgoingPackets.WrongPassword], true));
+
+                let loginDetails = [2, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1];
+
+                dataStream.writeData(loginDetails);
+                dataStream.send();
+
 
                 break;
 
         }
+    }
+
+    send(stream, buffer) {
+        stream.socket.write(buffer);
     }
 
 }
