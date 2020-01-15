@@ -92,6 +92,10 @@ class DataStream {
         this.concatBuffer(le ? [val, val >> 8] : [val >> 8, val]);
     }
 
+    writeShort128(val, isByte) {
+        this.concatBuffer(isByte ? [128 - val] : [val >> 8, val + 128]);
+    }
+
     writeInt(val) {
         this.concatBuffer([val >> 24, val >> 16, val >> 8, val]);
     }

@@ -2,6 +2,7 @@ let Packets = require('../network/packets'),
     Constants = require('../util/constants'),
     Utils = require('../util/utils'),
     DataStream = require('../network/datastream'),
+    Player = require('../game/entity/player/player'),
     bigInt = require('big-integer');
 
 class Incoming {
@@ -160,6 +161,8 @@ class Incoming {
                 let usernameString = Utils.longToString(usernameLong);
                 let passwordString = stream.readString();
 
+                //TODO - Password Checking here...
+
                 log.info(`Username String: ${usernameString}`);
                 log.info(`Password String: ${passwordString}`);
 
@@ -170,6 +173,14 @@ class Incoming {
                 dataStream.writeData(loginDetails);
                 dataStream.send();
 
+                let player = new Player(stream.socket);
+
+                player.load({
+                    username: usernameString,
+                    displayMode: displayMode,
+                    screenWidth: screenWidth,
+                    screenHeight: screenHeight
+                });
 
                 break;
 
